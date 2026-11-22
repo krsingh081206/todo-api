@@ -1,18 +1,18 @@
-# Kubernetes manifests: networking prerequisite (Cloud SQL private IP)
+# Kubernetes manifests: networking prerequisite (AlloyDB private IP)
 
-The todo-api pod connects **directly** to a Cloud SQL for PostgreSQL instance over its **private IP** on TCP 5432. There is no Cloud SQL Auth Proxy sidecar and no PostgreSQL workload, volume or Service in the cluster.
+The todo-api pod connects **directly** to a AlloyDB for PostgreSQL instance over its **private IP** on TCP 5432. There is no AlloyDB Auth Proxy sidecar and no PostgreSQL workload, volume or Service in the cluster.
 
 ## Prerequisites
 
 1. **VPC-native GKE cluster.** The cluster uses alias IPs (`--enable-ip-alias`), so pod IPs are routable inside the VPC. Routes-based clusters are not supported.
-2. **Cloud SQL with a private IP via Private Service Access (PSA).** The instance is attached to the same VPC as the cluster, or to a VPC the cluster can reach (VPC peering, Cloud VPN or Interconnect). PSA needs:
+2. **AlloyDB with a private IP via Private Service Access (PSA).** The instance is attached to the same VPC as the cluster, or to a VPC the cluster can reach (VPC peering, Cloud VPN or Interconnect). PSA needs:
    - an allocated IP range (`--purpose=VPC_PEERING`) in the VPC, and
    - a `servicenetworking-googleapis-com` peering between the VPC and Google's service producer network.
 3. **No public IP needed.** The instance can be created with `--no-assign-ip` (private IP only).
 4. **Reachability on TCP 5432.** Pod traffic to the instance's private IP must be allowed. In the same VPC, the default VPC rules and PSA allow it. Check these if you use custom setups:
    - Egress firewall rules or firewall policies that deny 5432 to the allocated range.
    - Kubernetes NetworkPolicies in `todo-app` that restrict egress.
-   - Cloud SQL "authorized networks" only apply to public IP. They are not used for private IP.
+   - AlloyDB "authorized networks" only apply to public IP. They are not used for private IP.
    - With a peered or on-prem VPC, custom routes must be exported and imported on the peering.
    - Pod ranges are not SNATed to the node IP for the PSA range on GKE by default. If the cluster uses a non-default masquerade config, make sure traffic to the PSA range is still routable.
 
@@ -21,7 +21,7 @@ The todo-api pod connects **directly** to a Cloud SQL for PostgreSQL instance ov
 Get the private IP and write it to the ConfigMap (`k8s/db-configmap.yaml`, key `DB_HOST`; `DB_PORT` stays `5432`):
 
 ```sh
-PRIVATE_IP=$(gcloud sql instances describe INSTANCE_NAME \
+PRIVATE_IP=$(gAlloyDB instances describe INSTANCE_NAME \
   --format='value(ipAddresses.filter("type:PRIVATE").extract("ipAddress").flatten())')
 echo "$PRIVATE_IP"
 # Replace the CLOUD_SQL_PRIVATE_IP placeholder, then apply:
@@ -38,8 +38,8 @@ Credentials (`DB_USER`, `DB_PASSWORD`) come from the `todo-api-db-credentials` S
 gcloud container clusters describe CLUSTER --region REGION \
   --format='value(ipAllocationPolicy.useIpAliases,network)'
 
-# 2. Cloud SQL has a private IP and its network
-gcloud sql instances describe INSTANCE_NAME \
+# 2. AlloyDB has a private IP and its network
+gAlloyDB instances describe INSTANCE_NAME \
   --format='value(ipAddresses,settings.ipConfiguration.privateNetwork,settings.ipConfiguration.ipv4Enabled)'
 
 # 3. Private Service Access: allocated range and peering
@@ -148,4 +148,4 @@ Note: the GCE load balancer health check defaults to `GET /` on the serving port
 
 - `deployment.yaml` reads `DB_HOST`, `DB_PORT`, `DB_NAME` from ConfigMap `todo-api-db` and `DB_USER`, `DB_PASSWORD` from Secret `todo-api-db-credentials`. Nothing is hardcoded.
 - `db-configmap.yaml` has `DB_PORT: "5432"` and a `DB_HOST` placeholder that must be replaced with the private IP.
-- The pod has two containers (`todo-api`, `otel-collector`). There is no Cloud SQL proxy sidecar.
+- The pod has two containers (`todo-api`, `otel-collector`). There is no AlloyDB proxy sidecar.
