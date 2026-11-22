@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: todo-app
+  labels:
+    app: todo-api
+data:
+  # Must match otel-collector-config.yaml at the repo root.
+  config.yaml: |
+    # OpenTelemetry Collector configuration (sidecar in the todo-api pod).
+    # Pipeline: traces -> [resource, batch] -> googlecloud (Cloud Trace).
+
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+
+    processors:
+      batch:
+        send_batch_size: 512
+        timeout: 5s
+
+      resource:
+        attributes:
+          - key: cloud.platform
+            value: gcp_kubernetes_engine
+            action: upsert
+
+    exporters:
+      # Exports traces to Google Cloud Trace.
+      # Authentication uses Application Default Credentials via the GKE node's
+      # service account (roles/cloudtrace.agent). No credentials or key files are
+      # configured here. The project ID is auto-detected from the GKE metadata
+      # server; to override it, set `project: ${env:GOOGLE_CLOUD_PROJECT}`.
+      googlecloud:
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [resource, batch]
+          exporters: [googlecloud]

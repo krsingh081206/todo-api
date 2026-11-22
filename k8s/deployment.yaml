@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo-api
+  namespace: todo-app
+  labels:
+    app: todo-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: todo-api
+  template:
+    metadata:
+      labels:
+        app: todo-api
+    spec:
+      containers:
+        - name: todo-api
+          # Placeholder: replace REGION and PROJECT_ID with real values.
+          image: todo-api-image
+          command: ["node"]
+          args: ["--require", "./tracing.js", "./app.js"]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: NODE_ENV
+              value: production
+            - name: LOG_LEVEL
+              value: info
+            # Traces go to the collector sidecar over the pod-local network.
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://localhost:4317
+            # DB connection: the app connects directly to the Cloud SQL private IP
+            # (no proxy sidecar). Non-secret values come from the todo-api-db
+            # ConfigMap; credentials come from the todo-api-db-credentials Secret.
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: todo-api-db
+                  key: DB_HOST
+            - name: DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: todo-api-db
+                  key: DB_PORT
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: todo-api-db
+                  key: DB_NAME
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: todo-api-db-credentials
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: todo-api-db-credentials
+                  key: DB_PASSWORD
+          # app.js has no health endpoint, so probes use a TCP check on the port.
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+        - name: otel-collector
+          # The contrib distribution includes the googlecloud exporter.
+          image: otel/opentelemetry-collector-contrib:0.120.0
+          args: ["--config=/etc/otelcol/config.yaml"]
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+          volumeMounts:
+            - name: otel-collector-config
+              mountPath: /etc/otelcol
+              readOnly: true
+          readinessProbe:
+            tcpSocket:
+              port: 4317
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 4317
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+      volumes:
+        - name: otel-collector-config
+          configMap:
+            # Defined in otel-collector-configmap.yaml; its key must be config.yaml.
+            name: otel-collector-config
+            items:
+              - key: config.yaml
+                path: config.yaml

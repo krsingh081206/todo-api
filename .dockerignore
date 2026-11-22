@@ -1,0 +1,14 @@
+node_modules
+.env
+.env.*
+.git
+.gitignore
+.kiro
+k8s
+test
+coverage
+*.log
+vitest.config.js
+otel-collector-config.yaml
+Dockerfile
+.dockerignore
