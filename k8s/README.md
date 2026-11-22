@@ -149,4 +149,3 @@ Note: the GCE load balancer health check defaults to `GET /` on the serving port
 - `deployment.yaml` reads `DB_HOST`, `DB_PORT`, `DB_NAME` from ConfigMap `todo-api-db` and `DB_USER`, `DB_PASSWORD` from Secret `todo-api-db-credentials`. Nothing is hardcoded.
 - `db-configmap.yaml` has `DB_PORT: "5432"` and a `DB_HOST` placeholder that must be replaced with the private IP.
 - The pod has two containers (`todo-api`, `otel-collector`). There is no Cloud SQL proxy sidecar.
-- No in-cluster Postgres Deployment, StatefulSet, PVC or Service exists in `k8s/`.
